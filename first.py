@@ -1,4 +1,4 @@
-from flask import Flask, url_for, request
+from flask import Flask, url_for, request, render_template
 
 app = Flask(__name__)
 
@@ -69,6 +69,12 @@ def greeting(username):
                     <h1>Привет, {username}!</h1>
                   </body>
                 </html>'''
+
+
+@app.route('/first')
+def first():
+    return render_template('first.html')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
