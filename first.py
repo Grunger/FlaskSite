@@ -1,12 +1,48 @@
-from flask import Flask, url_for, request, render_template
+from flask import Flask, url_for, request, render_template, redirect
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, SubmitField, TextAreaField
+from wtforms.fields.html5 import EmailField
+from wtforms.validators import DataRequired, Email
+from data import db_session
+from data.users import User
+from Занятия.flasksite.data.news import News
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'LKfkhds872w98feihw'
+
+
+class Form(FlaskForm):
+    name = StringField('Имя', validators=[DataRequired()])
+    email = StringField('Email', validators=[Email()])
+    password = PasswordField('Пароль')
+    submit = SubmitField('Отправить')
+
+
+class RegisterForm(FlaskForm):
+    email = EmailField('Почта', validators=[DataRequired()])
+    password = PasswordField('Пароль', validators=[DataRequired()])
+    password_again = PasswordField('Повторите пароль', validators=[DataRequired()])
+    name = StringField('Имя пользователя', validators=[DataRequired()])
+    about = TextAreaField("Немного о себе")
+    submit = SubmitField('Войти')
 
 
 @app.route('/')
-@app.route('/index')
 def index():
-    return "Привет, Яндекс!"
+    return render_template('base.html', title='Заголовок')
+
+
+@app.route('/child')
+def child():
+    return render_template('page.html', title='Расширяющий')
+
+
+@app.route('/form', methods=['GET', 'POST'])
+def form():
+    form = Form()
+    if form.validate_on_submit():
+        return form.name.data + ' ' + form.email.data + ' ' + form.password.data
+    return render_template('form.html', form=form)
 
 
 @app.route('/count')
@@ -71,10 +107,61 @@ def greeting(username):
                 </html>'''
 
 
-@app.route('/first')
-def first():
-    return render_template('first.html')
+@app.route("/news")
+def news():
+    db_sess = db_session.create_session()
+    news = db_sess.query(News).filter(News.is_private != True)
+    return render_template("index.html", news=news)
+
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegisterForm()
+    if form.validate_on_submit():
+        if form.password.data != form.password_again.data:
+            return render_template('register.html', title='Регистрация',
+                                   form=form,
+                                   message="Пароли не совпадают")
+        db_sess = db_session.create_session()
+        if db_sess.query(User).filter(User.email == form.email.data).first():
+            return render_template('register.html', title='Регистрация',
+                                   form=form,
+                                   message="Такой пользователь уже есть")
+        user = User(
+            name=form.name.data,
+            email=form.email.data,
+            about=form.about.data
+        )
+        user.set_password(form.password.data)
+        db_sess.add(user)
+        db_sess.commit()
+        return redirect('/')
+
+    return render_template('register.html', title='Регистрация', form=form)
 
 
 if __name__ == '__main__':
+    db_session.global_init("db/blogs.db")
+    # добавление в таблицу
+    # user = User()
+    # user.name = 'Пользователь 3'
+    # user.about = 'Не любит'
+    # user.email = 'dontlike@ya.ru'
+    # db_sess = db_session.create_session()
+    # db_sess.add(user)
+    # db_sess.commit()
+    # выборка
+    # db_sess = db_session.create_session()
+    # users = db_sess.query(User).filter(User.id > 1).all()
+    # print(users)
+    # изменение
+    # db_sess = db_session.create_session()
+    # user = db_sess.query(User).filter(User.id == 1).first()
+    # user.name = 'Суперпользователь 1'
+    # db_sess.commit()
+    # db_sess = db_session.create_session()
+    # news = News(title="Первая новость", content="Привет блог!",
+    #             user_id=1, is_private=False)
+    # db_sess.add(news)
+    # db_sess.commit()
     app.run(debug=True)
