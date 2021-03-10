@@ -1,11 +1,11 @@
 from flask import Flask, url_for, request, render_template, redirect, make_response, abort
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
-from Занятия.flasksite.data import db_session
-from Занятия.flasksite.data.users import User
-from Занятия.flasksite.data.news import News
-from Занятия.flasksite.forms.login import LoginForm
-from Занятия.flasksite.forms.news import NewsForm
-from Занятия.flasksite.forms.user import RegisterForm
+from data import db_session
+from data.users import User
+from data.news import News
+from forms.login import LoginForm
+from forms.news import NewsForm
+from forms.user import RegisterForm
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'LKfkhds872w98feihw'
