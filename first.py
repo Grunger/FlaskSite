@@ -1,117 +1,99 @@
-from flask import Flask, url_for, request, render_template, redirect
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, TextAreaField
-from wtforms.fields.html5 import EmailField
-from wtforms.validators import DataRequired, Email
-from data import db_session
-from data.users import User
+from flask import Flask, url_for, request, render_template, redirect, make_response, abort
+from flask_login import LoginManager, login_user, login_required, logout_user, current_user
+from Занятия.flasksite.data import db_session
+from Занятия.flasksite.data.users import User
 from Занятия.flasksite.data.news import News
+from Занятия.flasksite.forms.login import LoginForm
+from Занятия.flasksite.forms.news import NewsForm
+from Занятия.flasksite.forms.user import RegisterForm
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'LKfkhds872w98feihw'
-
-
-class Form(FlaskForm):
-    name = StringField('Имя', validators=[DataRequired()])
-    email = StringField('Email', validators=[Email()])
-    password = PasswordField('Пароль')
-    submit = SubmitField('Отправить')
-
-
-class RegisterForm(FlaskForm):
-    email = EmailField('Почта', validators=[DataRequired()])
-    password = PasswordField('Пароль', validators=[DataRequired()])
-    password_again = PasswordField('Повторите пароль', validators=[DataRequired()])
-    name = StringField('Имя пользователя', validators=[DataRequired()])
-    about = TextAreaField("Немного о себе")
-    submit = SubmitField('Войти')
+login_manager = LoginManager()
+login_manager.init_app(app)
 
 
 @app.route('/')
+@app.route('/index')
 def index():
     return render_template('base.html', title='Заголовок')
-
-
-@app.route('/child')
-def child():
-    return render_template('page.html', title='Расширяющий')
-
-
-@app.route('/form', methods=['GET', 'POST'])
-def form():
-    form = Form()
-    if form.validate_on_submit():
-        return form.name.data + ' ' + form.email.data + ' ' + form.password.data
-    return render_template('form.html', form=form)
-
-
-@app.route('/count')
-def countdown():
-    a = []
-    for i in range(10, 0, -1):
-        a.append(i)
-    return str(a)
-
-
-@app.route('/img')
-def image():
-    return f'''
-    <img src='{ url_for('static', filename='img/ovtsa.png')}'>
-    '''
-
-
-@app.route('/css', methods=['GET', 'POST'])
-def start():
-    if request.method == 'GET':
-        return '''
-            <!DOCTYPE html>
-            <html lang="ru">
-            <head>
-                <meta charset="UTF-8">
-                <title>Крутая страница</title>
-                <alink rel="stylesheet" href="static/css/style.css">
-                <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BmbxuPwQa2lc/FVzBcNJ7UAyJxM6wuqIj61tLrc4wSX0szH/Ev+nYRRuWlolflfl" crossorigin="anonymous">
-                <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta2/dist/js/bootstrap.bundle.min.js" integrity="sha384-b5kHyXgcpbZJO/tY9Ul7kGkf1S0CWuKcCD38l8YkeH8z8QjE0GmW1gYU5S9FOnJ0" crossorigin="anonymous"></script>
-            </head>
-            <body>
-            <h1> Заголовок </h1>
-            <p>Точно по такому же принципу работает и остальной статический контент. Давайте рассмотрим еще один пример: сделаем обработчик return_sample_page, который вернет пользователю нашу первую HTML-страницу, сверстанную по всем правилам:</p>
-            <p>А теперь давайте добавим css-файл, который заменит цвет текста на красный. Для этого создадим в папке css внутри папки со статическим контентом файл style.css со следующим текстом:</p>
-            <form method="post" enctype="multipart/form-data">
-            <input type='text' name='text'><br>
-            <button type="submit" class="btn btn-primary">Отправить</button>
-            </form>
-            </body>
-            </html>
-        '''
-    else:
-        return request.form['text']
-
-
-@app.route('/greeting/<username>')
-def greeting(username):
-    return f'''<!doctype html>
-                <html lang="en">
-                  <head>
-                    <meta charset="utf-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-                   <link rel="stylesheet"
-                   href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css"
-                   integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1"
-                   crossorigin="anonymous">
-                    <title>Привет, {username}</title>
-                  </head>
-                  <body>
-                    <h1>Привет, {username}!</h1>
-                  </body>
-                </html>'''
 
 
 @app.route("/news")
 def news():
     db_sess = db_session.create_session()
-    news = db_sess.query(News).filter(News.is_private != True)
+    if current_user.is_authenticated:
+        news = db_sess.query(News).filter(
+            (News.user == current_user) | (News.is_private != True))
+    else:
+        news = db_sess.query(News).filter(News.is_private != True)
     return render_template("index.html", news=news)
+
+
+@app.route('/add_news',  methods=['GET', 'POST'])
+@login_required
+def add_news():
+    form = NewsForm()
+    if form.validate_on_submit():
+        db_sess = db_session.create_session()
+        news = News()
+        news.title = form.title.data
+        news.content = form.content.data
+        news.is_private = form.is_private.data
+        current_user.news.append(news)
+        db_sess.merge(current_user)
+        db_sess.commit()
+        return redirect('/')
+    return render_template('news.html', title='Добавление новости',
+                           form=form)
+
+
+@app.route('/news/<int:id>', methods=['GET', 'POST'])
+@login_required
+def edit_news(id):
+    form = NewsForm()
+    if request.method == "GET":
+        db_sess = db_session.create_session()
+        news = db_sess.query(News).filter(News.id == id,
+                                          News.user == current_user
+                                          ).first()
+        if news:
+            form.title.data = news.title
+            form.content.data = news.content
+            form.is_private.data = news.is_private
+        else:
+            abort(404)
+    if form.validate_on_submit():
+        db_sess = db_session.create_session()
+        news = db_sess.query(News).filter(News.id == id,
+                                          News.user == current_user
+                                          ).first()
+        if news:
+            news.title = form.title.data
+            news.content = form.content.data
+            news.is_private = form.is_private.data
+            db_sess.commit()
+            return redirect('/')
+        else:
+            abort(404)
+    return render_template('news.html',
+                           title='Редактирование новости',
+                           form=form
+                           )
+
+@app.route('/news_delete/<int:id>', methods=['GET', 'POST'])
+@login_required
+def news_delete(id):
+    db_sess = db_session.create_session()
+    news = db_sess.query(News).filter(News.id == id,
+                                      News.user == current_user
+                                      ).first()
+    if news:
+        db_sess.delete(news)
+        db_sess.commit()
+    else:
+        abort(404)
+    return redirect('/')
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -136,8 +118,51 @@ def register():
         db_sess.add(user)
         db_sess.commit()
         return redirect('/')
-
     return render_template('register.html', title='Регистрация', form=form)
+
+
+@app.route("/cookie_test")
+def cookie_test():
+    visits_count = int(request.cookies.get("visits_count", 0))
+    if visits_count:
+        res = make_response(
+            f"Вы пришли на эту страницу {visits_count + 1} раз")
+        res.set_cookie("visits_count", str(visits_count + 1),
+                       max_age=60 * 60 * 24 * 365 * 2)
+    else:
+        res = make_response(
+            "Вы пришли на эту страницу в первый раз за последние 2 года")
+        res.set_cookie("visits_count", '1',
+                       max_age=60 * 60 * 24 * 365 * 2)
+    return res
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        db_sess = db_session.create_session()
+        user = db_sess.query(User).filter(User.email == form.email.data).first()
+        if user and user.check_password(form.password.data):
+            login_user(user, remember=form.remember_me.data)
+            return redirect("/")
+        return render_template('login.html',
+                               message="Неправильный логин или пароль",
+                               form=form)
+    return render_template('login.html', title='Авторизация', form=form)
+
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect("/")
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    db_sess = db_session.create_session()
+    return db_sess.query(User).get(user_id)
 
 
 if __name__ == '__main__':
